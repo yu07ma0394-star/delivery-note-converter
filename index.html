@@ -652,14 +652,23 @@
                 const textContent = await page.getTextContent();
                 const text = textContent.items.map(item => item.str).join(' ');
                 
-                console.log(`Page ${pageNum} text:`, text.substring(0, 300)); // デバッグ用
+                console.log(`Page ${pageNum} text:`, text.substring(0, 300));
                 
-                const order = extractOrderData(text);
-                if (order) {
-                    console.log('Extracted order:', order); // デバッグ用
-                    extractedData.push(order);
+                const orders = extractOrderData(text);
+                if (orders) {
+                    if (Array.isArray(orders)) {
+                        // 複数商品の場合
+                        orders.forEach(order => {
+                            console.log('Extracted order:', order);
+                            extractedData.push(order);
+                        });
+                    } else {
+                        // 単一商品の場合（後方互換性）
+                        console.log('Extracted order:', orders);
+                        extractedData.push(orders);
+                    }
                 } else {
-                    console.log(`No order found on page ${pageNum}`); // デバッグ用
+                    console.log(`No order found on page ${pageNum}`);
                 }
             }
         }
@@ -717,19 +726,23 @@
                 console.log('❌ Recipient section not found');
             }
             
-            // 商品情報の抽出
-            // No. 商品名 単価 数量 小計(税込) の後に商品番号がある
-            const productSectionMatch = text.match(/No\.\s*商品名\s*単価\s*数量\s*⼩計\(税込\)\s*(\d{8,})\s+(.+?)¥([\d,]+)\s+(\d+)\s+¥([\d,]+)/);
+            // 金額情報の抽出（全体の合計）
+            const subtotalMatch = text.match(/⼩計\s*\(税込\)\s*¥([\d,]+)/);
+            const shippingMatch = text.match(/送料\s*\(税込\)\s*¥([\d,]+)/);
+            const totalMatch = text.match(/合計⾦額\s*¥([\d,]+)/);
             
-            let productDetails = '';
-            let unitPrice = '';
-            let quantity = '1';
+            // 複数商品の抽出
+            // No. 商品名 単価 数量 小計(税込) の後に商品番号がある形式を全て抽出
+            const productPattern = /(\d{8,})\s+(.+?)¥([\d,]+)\s+(\d+)\s+¥([\d,]+)/g;
+            const products = [];
+            let match;
             
-            if (productSectionMatch) {
-                const productNumber = productSectionMatch[1];
-                const productText = productSectionMatch[2].trim();
-                unitPrice = productSectionMatch[3];
-                quantity = productSectionMatch[4];
+            while ((match = productPattern.exec(text)) !== null) {
+                const productNumber = match[1];
+                const productText = match[2].trim();
+                const unitPrice = match[3];
+                const quantity = match[4];
+                const productSubtotal = match[5];
                 
                 console.log('Product number:', productNumber);
                 console.log('Product text:', productText);
@@ -807,32 +820,41 @@
                     }
                 }
                 
-                productDetails = lines.join('\n');
+                const productDetails = lines.join('\n');
                 console.log('✓ Product lines:', lines);
-            } else {
-                console.log('❌ Product section not found');
+                
+                products.push({
+                    productNumber: productNumber,
+                    productDetails: productDetails,
+                    quantity: quantity,
+                    unitPrice: unitPrice,
+                    productSubtotal: productSubtotal
+                });
             }
             
-            // 金額情報の抽出
-            const subtotalMatch = text.match(/⼩計\s*\(税込\)\s*¥([\d,]+)/);
-            const shippingMatch = text.match(/送料\s*\(税込\)\s*¥([\d,]+)/);
-            const totalMatch = text.match(/合計⾦額\s*¥([\d,]+)/);
+            console.log(`✓ Found ${products.length} products`);
             
-            const result = {
+            if (products.length === 0) {
+                console.log('❌ No products found');
+                return null;
+            }
+            
+            // 商品ごとに別の注文として返す
+            const results = products.map(product => ({
                 orderDate: orderDateMatch ? orderDateMatch[1] : '',
                 orderId: orderIdMatch[1],
                 recipient: recipientInfo,
-                productDetails: productDetails,
-                quantity: quantity,
-                unitPrice: unitPrice,
-                subtotal: subtotalMatch ? subtotalMatch[1] : '',
-                shipping: shippingMatch ? shippingMatch[1] : '',
-                total: totalMatch ? totalMatch[1] : ''
-            };
+                productDetails: product.productDetails,
+                quantity: product.quantity,
+                unitPrice: product.unitPrice,
+                subtotal: product.productSubtotal,
+                shipping: products.length > 1 ? '0' : (shippingMatch ? shippingMatch[1] : '0'), // 複数商品の場合、最後の商品のみ送料
+                total: products.length > 1 ? product.productSubtotal : (totalMatch ? totalMatch[1] : '')
+            }));
             
-            console.log('✓✓✓ Final result:', result);
+            console.log('✓✓✓ Final results:', results);
             console.log('===================\n');
-            return result;
+            return results;
         }
 
         function displayResults() {
