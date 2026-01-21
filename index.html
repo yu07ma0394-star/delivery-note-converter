@@ -702,18 +702,24 @@
                 
                 // 名前
                 const nameMatch = section.match(/([^\s]+)\s+([^\s]+)\s*様/);
-                // 郵便番号
-                const postalMatch = section.match(/〒(\d+)/);
-                // 住所（郵便番号の後からTelまで）
-                const addressMatch = section.match(/〒\d+\s+(.+?)(?=\s+Tel)/);
-                // 電話
-                const telMatch = section.match(/Tel\s*[:：]\s*([\d]+)/);
-                // メール
-                const mailMatch = section.match(/Mail\s*[:：]\s*([^\s]+)/);
                 
                 if (nameMatch) {
+                    const name = `${nameMatch[1]} ${nameMatch[2]}`;
+                    
+                    // 郵便番号
+                    const postalMatch = section.match(/〒(\d+)/);
+                    
+                    // 住所（郵便番号の後からTelまで、最初のTelのみ）
+                    const addressMatch = section.match(/〒\d+\s+(.+?)(?=\s+Tel)/);
+                    
+                    // 電話（最初に出現するものだけ）
+                    const telMatch = section.match(/Tel\s*[:：]\s*([\d]+)/);
+                    
+                    // メール（最初に出現するものだけ）
+                    const mailMatch = section.match(/Mail\s*[:：]\s*([^\s]+)/);
+                    
                     const lines = [];
-                    lines.push(`${nameMatch[1]} ${nameMatch[2]} 様`);
+                    lines.push(`${name} 様`);
                     if (postalMatch) lines.push(`〒${postalMatch[1]}`);
                     if (addressMatch) lines.push(addressMatch[1].trim());
                     if (telMatch) lines.push(`Tel: ${telMatch[1]}`);
@@ -732,8 +738,9 @@
             const totalMatch = text.match(/合計⾦額\s*¥([\d,]+)/);
             
             // 複数商品の抽出
-            // No. 商品名 単価 数量 小計(税込) の後に商品番号がある形式を全て抽出
-            const productPattern = /(\d{8,})\s+(.+?)¥([\d,]+)\s+(\d+)\s+¥([\d,]+)/g;
+            // No. の後に商品番号、そしてテキスト、最後に ¥数字 数量 ¥数字 のパターン
+            // 商品番号から次の商品番号または購入金額までを取得
+            const productPattern = /(\d{9})\s+([^¥\d]+?)¥([\d,]+)\s+(\d+)\s+¥([\d,]+)/g;
             const products = [];
             let match;
             
