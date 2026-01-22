@@ -303,13 +303,11 @@
             white-space: nowrap;
         }
 
-        th:nth-child(1) { width: 8%; }  /* 注文日 */
-        th:nth-child(2) { width: 12%; } /* 注文ID */
-        th:nth-child(3) { width: 20%; } /* お届け先情報 */
-        th:nth-child(4) { width: 40%; } /* 商品詳細 */
-        th:nth-child(5) { width: 6%; }  /* 数量 */
-        th:nth-child(6) { width: 8%; }  /* 小計 */
-        th:nth-child(7) { width: 6%; }  /* 送料 */
+        th:nth-child(1) { width: 10%; }  /* 注文日 */
+        th:nth-child(2) { width: 15%; } /* 注文ID */
+        th:nth-child(3) { width: 25%; } /* お届け先情報 */
+        th:nth-child(4) { width: 45%; } /* 商品詳細 */
+        th:nth-child(5) { width: 5%; }  /* 数量 */
 
         td {
             padding: 16px;
@@ -554,8 +552,6 @@
                             <th>お届け先情報</th>
                             <th>商品詳細</th>
                             <th>数量</th>
-                            <th>小計</th>
-                            <th>送料</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody">
@@ -869,8 +865,6 @@
                     <td style="white-space: pre-line; font-size: 0.85rem; line-height: 1.5;">${order.recipient}</td>
                     <td style="white-space: pre-line; line-height: 1.5;">${order.productDetails}</td>
                     <td>${order.quantity}</td>
-                    <td class="amount">¥${order.subtotal}</td>
-                    <td class="amount">¥${order.shipping}</td>
                 `;
                 tbody.appendChild(row);
 
@@ -891,9 +885,7 @@
                 '注文ID': order.orderId,
                 'お届け先情報': order.recipient,
                 '商品詳細': order.productDetails,
-                '数量': order.quantity,
-                '小計': order.subtotal,
-                '送料': order.shipping
+                '数量': order.quantity
             }));
 
             const ws = XLSX.utils.json_to_sheet(data);
@@ -903,10 +895,8 @@
                 { wch: 12 },  // 注文日
                 { wch: 20 },  // 注文ID
                 { wch: 40 },  // お届け先情報
-                { wch: 50 },  // 商品詳細
-                { wch: 8 },   // 数量
-                { wch: 12 },  // 小計
-                { wch: 10 }   // 送料
+                { wch: 60 },  // 商品詳細
+                { wch: 8 }    // 数量
             ];
             ws['!cols'] = colWidths;
             
