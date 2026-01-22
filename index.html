@@ -303,13 +303,13 @@
             white-space: nowrap;
         }
 
-        th:nth-child(1) { width: 10%; }  /* 注文日 */
-        th:nth-child(2) { width: 15%; } /* 注文ID */
-        th:nth-child(3) { width: 25%; } /* お届け先情報 */
-        th:nth-child(4) { width: 30%; } /* 商品詳細 */
-        th:nth-child(5) { width: 8%; }  /* 数量 */
-        th:nth-child(6) { width: 10%; }  /* 小計 */
-        th:nth-child(7) { width: 10%; }  /* 送料 */
+        th:nth-child(1) { width: 8%; }  /* 注文日 */
+        th:nth-child(2) { width: 12%; } /* 注文ID */
+        th:nth-child(3) { width: 20%; } /* お届け先情報 */
+        th:nth-child(4) { width: 40%; } /* 商品詳細 */
+        th:nth-child(5) { width: 6%; }  /* 数量 */
+        th:nth-child(6) { width: 8%; }  /* 小計 */
+        th:nth-child(7) { width: 6%; }  /* 送料 */
 
         td {
             padding: 16px;
@@ -659,22 +659,27 @@
             if (recipientMatch) {
                 const section = recipientMatch[1].trim();
                 
-                // 名前
+                // 名前（様の前の2単語）
                 const nameMatch = section.match(/([^\s]+)\s+([^\s]+)\s*様/);
-                // 郵便番号
+                // 郵便番号（7桁）
                 const postalMatch = section.match(/〒(\d{7})/);
-                // 住所（郵便番号の後からTelの前まで）
-                const addressMatch = section.match(/〒\d{7}\s+(.+?)\s+Tel/);
-                // 電話
+                // 住所（郵便番号の後からTelの前まで、スペースで結合）
+                let address = '';
+                if (postalMatch) {
+                    const afterPostal = section.split(postalMatch[0])[1];
+                    const beforeTel = afterPostal.split(/\s+Tel/)[0];
+                    address = beforeTel.trim();
+                }
+                // 電話（最初に出現するもののみ）
                 const telMatch = section.match(/Tel\s*[:：]\s*([\d]+)/);
-                // メール
-                const mailMatch = section.match(/Mail\s*[:：]\s*([^\s]+)/);
+                // メール（最初に出現するもののみ）
+                const mailMatch = section.match(/Mail\s*[:：]\s*([^\s]+@[^\s]+)/);
                 
                 if (nameMatch) {
                     const lines = [];
                     lines.push(`${nameMatch[1]} ${nameMatch[2]} 様`);
                     if (postalMatch) lines.push(`〒${postalMatch[1]}`);
-                    if (addressMatch) lines.push(addressMatch[1].trim());
+                    if (address) lines.push(address);
                     if (telMatch) lines.push(`Tel: ${telMatch[1]}`);
                     if (mailMatch) lines.push(`Mail: ${mailMatch[1]}`);
                     
@@ -784,8 +789,8 @@
             const shipping = shippingMatch ? shippingMatch[1] : '0';
             const total = totalMatch ? totalMatch[1] : '';
             
-            // 各商品を別の行として返す
-            return products.map((product, index) => ({
+            // 各商品を配列に格納（まだ返さない）
+            const allProducts = products.map((product, index) => ({
                 orderDate: orderDateMatch ? orderDateMatch[1] : '',
                 orderId: orderIdMatch[1],
                 recipient: recipientInfo,
@@ -795,6 +800,29 @@
                 shipping: index === products.length - 1 ? shipping : '0',
                 total: index === products.length - 1 ? total : product.subtotal
             }));
+            
+            // 複数商品がある場合は1つにまとめる
+            if (allProducts.length > 1) {
+                const combinedProductDetails = allProducts.map((p, i) => 
+                    `【商品${i + 1}】\n${p.productDetails}\n数量: ${p.quantity}\n小計: ¥${p.subtotal}`
+                ).join('\n\n');
+                
+                const totalQuantity = allProducts.reduce((sum, p) => sum + parseInt(p.quantity), 0);
+                const totalSubtotal = allProducts.reduce((sum, p) => sum + parseInt(p.subtotal.replace(/,/g, '')), 0);
+                
+                return [{
+                    orderDate: allProducts[0].orderDate,
+                    orderId: allProducts[0].orderId,
+                    recipient: allProducts[0].recipient,
+                    productDetails: combinedProductDetails,
+                    quantity: totalQuantity.toString(),
+                    subtotal: totalSubtotal.toLocaleString(),
+                    shipping: shipping,
+                    total: total
+                }];
+            }
+            
+            return allProducts;
         }
 
         function displayResults() {
