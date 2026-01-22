@@ -688,12 +688,22 @@
                 }
             }
             
-            // 商品の抽出（9桁の商品番号を全て探す）
+            // 商品の抽出（商品テーブルヘッダーの後にある9桁の商品番号から）
+            // まず商品テーブルの開始位置を探す
+            const tableStartMatch = text.match(/No\.\s+商品名\s+単価\s+数量\s+⼩計\(税込\)/);
+            if (!tableStartMatch) {
+                console.log('❌ Product table not found');
+                return [];
+            }
+            
+            // 商品テーブル以降のテキストのみを対象にする
+            const tableText = text.substring(tableStartMatch.index + tableStartMatch[0].length);
+            
             const productPattern = /(\d{9})\s+(.+?)¥([\d,]+)\s+(\d+)\s+¥([\d,]+)/g;
             const products = [];
             let match;
             
-            while ((match = productPattern.exec(text)) !== null) {
+            while ((match = productPattern.exec(tableText)) !== null) {
                 const productNum = match[1];
                 const productText = match[2].trim();
                 const unitPrice = match[3];
