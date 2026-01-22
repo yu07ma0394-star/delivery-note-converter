@@ -652,40 +652,56 @@
             console.log('✓ Order ID:', orderIdMatch[1]);
             console.log('✓ Order Date:', orderDateMatch ? orderDateMatch[1] : '');
             
-            // お届け先情報（お届け先から請求先まで）
+            // お届け先情報の抽出
             const recipientMatch = text.match(/お届け先\s*[:：]\s*(.+?)\s*請求先/);
             let recipientInfo = '';
             
             if (recipientMatch) {
                 const section = recipientMatch[1].trim();
+                console.log('Raw recipient section:', section);
                 
-                // 名前（様の前の2単語）
+                const lines = [];
+                
+                // 1. 名前（様の前の2単語）
                 const nameMatch = section.match(/([^\s]+)\s+([^\s]+)\s*様/);
-                // 郵便番号（7桁）
-                const postalMatch = section.match(/〒(\d{7})/);
-                // 住所（郵便番号の後からTelの前まで、スペースで結合）
-                let address = '';
-                if (postalMatch) {
-                    const afterPostal = section.split(postalMatch[0])[1];
-                    const beforeTel = afterPostal.split(/\s+Tel/)[0];
-                    address = beforeTel.trim();
-                }
-                // 電話（最初に出現するもののみ）
-                const telMatch = section.match(/Tel\s*[:：]\s*([\d]+)/);
-                // メール（最初に出現するもののみ）
-                const mailMatch = section.match(/Mail\s*[:：]\s*([^\s]+@[^\s]+)/);
-                
                 if (nameMatch) {
-                    const lines = [];
                     lines.push(`${nameMatch[1]} ${nameMatch[2]} 様`);
-                    if (postalMatch) lines.push(`〒${postalMatch[1]}`);
-                    if (address) lines.push(address);
-                    if (telMatch) lines.push(`Tel: ${telMatch[1]}`);
-                    if (mailMatch) lines.push(`Mail: ${mailMatch[1]}`);
-                    
-                    recipientInfo = lines.join('\n');
-                    console.log('✓ Recipient:', lines);
                 }
+                
+                // 2. 郵便番号
+                const postalMatch = section.match(/〒(\d{7})/);
+                if (postalMatch) {
+                    lines.push(`〒${postalMatch[1]}`);
+                }
+                
+                // 3. 住所（郵便番号の後、Telの前まで）
+                if (postalMatch) {
+                    const afterPostalIndex = section.indexOf(postalMatch[0]) + postalMatch[0].length;
+                    const afterPostal = section.substring(afterPostalIndex);
+                    const telIndex = afterPostal.search(/Tel\s*[:：]/);
+                    
+                    if (telIndex > 0) {
+                        const address = afterPostal.substring(0, telIndex).trim();
+                        if (address) {
+                            lines.push(address);
+                        }
+                    }
+                }
+                
+                // 4. Tel（最初に出現する電話番号のみ）
+                const telMatch = section.match(/Tel\s*[:：]\s*(\d+)/);
+                if (telMatch) {
+                    lines.push(`Tel: ${telMatch[1]}`);
+                }
+                
+                // 5. Mail（最初に出現するメールアドレスのみ）
+                const mailMatch = section.match(/Mail\s*[:：]\s*([^\s]+@[^\s]+)/);
+                if (mailMatch) {
+                    lines.push(`Mail: ${mailMatch[1]}`);
+                }
+                
+                recipientInfo = lines.join('\n');
+                console.log('✓ Recipient (clean):', lines);
             }
             
             // 商品の抽出（商品テーブルヘッダーの後にある9桁の商品番号から）
