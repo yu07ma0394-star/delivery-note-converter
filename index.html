@@ -620,42 +620,12 @@
             for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                 const page = await pdf.getPage(pageNum);
                 const textContent = await page.getTextContent();
+                const text = textContent.items.map(item => item.str).join(' ');
                 
-                // Y座標でソートしてテキストを行ごとに再構築
-                const items = textContent.items.sort((a, b) => {
-                    const yDiff = Math.abs(a.transform[5] - b.transform[5]);
-                    if (yDiff < 5) {
-                        return a.transform[4] - b.transform[4]; // X座標でソート
-                    }
-                    return b.transform[5] - a.transform[5]; // Y座標でソート（上から下）
-                });
+                console.log(`=== Page ${pageNum} ===`);
+                console.log('Text:', text.substring(0, 500));
                 
-                const lines = [];
-                let currentLine = { y: null, text: '', items: [] };
-                
-                items.forEach(item => {
-                    const y = Math.round(item.transform[5]);
-                    
-                    if (currentLine.y === null || Math.abs(y - currentLine.y) < 5) {
-                        currentLine.y = y;
-                        currentLine.text += (currentLine.text ? ' ' : '') + item.str;
-                        currentLine.items.push(item);
-                    } else {
-                        if (currentLine.text.trim()) {
-                            lines.push(currentLine.text.trim());
-                        }
-                        currentLine = { y: y, text: item.str, items: [item] };
-                    }
-                });
-                
-                if (currentLine.text.trim()) {
-                    lines.push(currentLine.text.trim());
-                }
-                
-                console.log(`=== Page ${pageNum} lines ===`);
-                console.log(lines.slice(0, 30));
-                
-                const orders = extractOrderData(lines);
+                const orders = extractOrderData(text);
                 if (orders && orders.length > 0) {
                     orders.forEach(order => {
                         extractedData.push(order);
@@ -664,151 +634,167 @@
             }
         }
 
-        function extractOrderData(lines) {
-            const orders = [];
+        function extractOrderData(text) {
+            // 空白を正規化
+            text = text.replace(/\s+/g, ' ');
             
-            // 注文IDと注文日を探す
-            let orderDate = '';
-            let orderId = '';
+            console.log('Processing text:', text.substring(0, 300));
             
-            for (let line of lines) {
-                if (line.includes('注文日') || line.includes('注⽂⽇')) {
-                    const match = line.match(/(\d{4}\/\d{2}\/\d{2})/);
-                    if (match) orderDate = match[1];
-                }
-                if (line.includes('注文ID') || line.includes('注⽂ID')) {
-                    const match = line.match(/[:：]\s*([A-Z0-9]+)/);
-                    if (match) orderId = match[1];
-                }
-            }
+            // 注文情報
+            const orderIdMatch = text.match(/注⽂ID\s*[:：]\s*([A-Z0-9]+)/);
+            const orderDateMatch = text.match(/注⽂⽇\s*[:：]\s*(\d{4}\/\d{2}\/\d{2})/);
             
-            if (!orderId) {
-                console.log('Order ID not found');
+            if (!orderIdMatch) {
+                console.log('❌ Order ID not found');
                 return [];
             }
             
-            console.log(`Found order: ${orderId} on ${orderDate}`);
+            console.log('✓ Order ID:', orderIdMatch[1]);
+            console.log('✓ Order Date:', orderDateMatch ? orderDateMatch[1] : '');
             
-            // お届け先情報を抽出
-            let recipientLines = [];
-            let inRecipient = false;
+            // お届け先情報（お届け先から請求先まで）
+            const recipientMatch = text.match(/お届け先\s*[:：]\s*(.+?)\s*請求先/);
+            let recipientInfo = '';
             
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
+            if (recipientMatch) {
+                const section = recipientMatch[1].trim();
                 
-                if (line.includes('お届け先') || line.includes('お届け先:')) {
-                    inRecipient = true;
-                    continue;
-                }
+                // 名前
+                const nameMatch = section.match(/([^\s]+)\s+([^\s]+)\s*様/);
+                // 郵便番号
+                const postalMatch = section.match(/〒(\d{7})/);
+                // 住所（郵便番号の後からTelの前まで）
+                const addressMatch = section.match(/〒\d{7}\s+(.+?)\s+Tel/);
+                // 電話
+                const telMatch = section.match(/Tel\s*[:：]\s*([\d]+)/);
+                // メール
+                const mailMatch = section.match(/Mail\s*[:：]\s*([^\s]+)/);
                 
-                if (inRecipient) {
-                    if (line.includes('請求先') || line.includes('発送元')) {
-                        break;
-                    }
-                    if (line.trim()) {
-                        recipientLines.push(line.trim());
-                    }
+                if (nameMatch) {
+                    const lines = [];
+                    lines.push(`${nameMatch[1]} ${nameMatch[2]} 様`);
+                    if (postalMatch) lines.push(`〒${postalMatch[1]}`);
+                    if (addressMatch) lines.push(addressMatch[1].trim());
+                    if (telMatch) lines.push(`Tel: ${telMatch[1]}`);
+                    if (mailMatch) lines.push(`Mail: ${mailMatch[1]}`);
+                    
+                    recipientInfo = lines.join('\n');
+                    console.log('✓ Recipient:', lines);
                 }
             }
             
-            const recipientInfo = recipientLines.join('\n');
-            console.log('Recipient:', recipientLines);
-            
-            // 商品情報を抽出（商品番号から始まる）
+            // 商品の抽出（9桁の商品番号を全て探す）
+            const productPattern = /(\d{9})\s+(.+?)¥([\d,]+)\s+(\d+)\s+¥([\d,]+)/g;
             const products = [];
+            let match;
             
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
+            while ((match = productPattern.exec(text)) !== null) {
+                const productNum = match[1];
+                const productText = match[2].trim();
+                const unitPrice = match[3];
+                const quantity = match[4];
+                const subtotal = match[5];
                 
-                // 9桁の商品番号を探す
-                const productNumMatch = line.match(/^(\d{9})\s/);
-                if (productNumMatch) {
-                    const productNum = productNumMatch[1];
-                    console.log(`Found product: ${productNum}`);
-                    
-                    // 商品名とオプションを収集
-                    const productLines = [];
-                    productLines.push(lines[i].replace(/^\d{9}\s+/, '').trim());
-                    
-                    // 次の行から、価格が出てくるまでまたは次の商品番号まで
-                    let j = i + 1;
-                    while (j < lines.length) {
-                        const nextLine = lines[j];
-                        
-                        // 次の商品番号または価格パターン
-                        if (/^\d{9}\s/.test(nextLine) || /^¥[\d,]+\s+\d+\s+¥[\d,]+$/.test(nextLine)) {
-                            break;
-                        }
-                        
-                        // 単価・数量・小計のヘッダー行はスキップ
-                        if (nextLine.includes('単価') || nextLine.includes('数量') || nextLine.includes('小計')) {
-                            j++;
-                            continue;
-                        }
-                        
-                        if (nextLine.trim()) {
-                            productLines.push(nextLine.trim());
-                        }
-                        j++;
+                console.log('Found product:', productNum);
+                console.log('Product text:', productText);
+                
+                // 商品テキストを整形
+                const lines = [];
+                
+                // 商品名（【】で始まるか、×を含むパターン）
+                if (productText.startsWith('【')) {
+                    // 【Light】Arbor Hair Oil 100ml のような形式
+                    const mainMatch = productText.match(/(【[^】]+】[^\s]+\s+[^\s]+\s+[^\s]+)/);
+                    if (mainMatch) {
+                        lines.push(mainMatch[1]);
                     }
-                    
-                    // 価格情報を探す（¥7,880 1 ¥7,880 のような形式）
-                    let unitPrice = '';
-                    let quantity = '1';
-                    let subtotal = '';
-                    
-                    if (j < lines.length) {
-                        const priceLine = lines[j];
-                        const priceMatch = priceLine.match(/¥([\d,]+)\s+(\d+)\s+¥([\d,]+)/);
-                        if (priceMatch) {
-                            unitPrice = priceMatch[1];
-                            quantity = priceMatch[2];
-                            subtotal = priceMatch[3];
-                        }
+                } else if (productText.includes('×')) {
+                    // Chalice wood diffuser×aroma oil 5ml set のような形式
+                    const mainMatch = productText.match(/^([^:：]+?)(?=\s+[A-Z][a-z]+\s*[:：])/);
+                    if (mainMatch) {
+                        lines.push(mainMatch[1].trim());
                     }
-                    
-                    products.push({
-                        productDetails: productLines.join('\n'),
-                        quantity: quantity,
-                        subtotal: subtotal
-                    });
-                    
-                    console.log('Product details:', productLines);
-                    
-                    i = j; // 次の商品へ
+                } else {
+                    // Arbor Gift- Life Design Set - のような形式
+                    const mainMatch = productText.match(/^([^:：]+?)(?=\s+[A-Z][a-z]+\s*[:：])/);
+                    if (mainMatch) {
+                        lines.push(mainMatch[1].trim());
+                    }
                 }
+                
+                // バリエーション行（単独の単語）
+                const restText = productText.substring(lines[0] ? lines[0].length : 0).trim();
+                const parts = restText.split(/\s+/);
+                let currentOption = '';
+                
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    
+                    if (part.includes(':') || part.includes('：')) {
+                        // オプション名の開始
+                        if (currentOption && !currentOption.includes(':') && !currentOption.includes('：')) {
+                            // 前のバリエーション行を保存
+                            lines.push(currentOption.trim());
+                            currentOption = '';
+                        }
+                        
+                        // オプション行を構築
+                        currentOption = part;
+                        while (i + 1 < parts.length && !parts[i + 1].includes(':') && !parts[i + 1].includes('：')) {
+                            i++;
+                            currentOption += ' ' + parts[i];
+                            if (parts[i].includes(')')) break;
+                        }
+                        
+                        lines.push(currentOption.trim());
+                        currentOption = '';
+                    } else {
+                        // バリエーション名
+                        if (currentOption) {
+                            currentOption += ' ' + part;
+                        } else {
+                            currentOption = part;
+                        }
+                    }
+                }
+                
+                // 残りのバリエーション
+                if (currentOption && !currentOption.includes(':') && !currentOption.includes('：')) {
+                    lines.push(currentOption.trim());
+                }
+                
+                products.push({
+                    productDetails: lines.join('\n'),
+                    quantity: quantity,
+                    subtotal: subtotal
+                });
+                
+                console.log('✓ Product lines:', lines);
             }
             
-            // 送料と合計を抽出
-            let shipping = '0';
-            let total = '';
-            
-            for (let line of lines) {
-                if (line.includes('送料') && line.includes('¥')) {
-                    const match = line.match(/¥([\d,]+)/);
-                    if (match) shipping = match[1];
-                }
-                if (line.includes('合計金額') || line.includes('合計⾦額')) {
-                    const match = line.match(/¥([\d,]+)/);
-                    if (match) total = match[1];
-                }
+            if (products.length === 0) {
+                console.log('❌ No products found');
+                return [];
             }
+            
+            // 送料と合計
+            const shippingMatch = text.match(/送料\s*\(税込\)\s*¥([\d,]+)/);
+            const totalMatch = text.match(/合計⾦額\s*¥([\d,]+)/);
+            
+            const shipping = shippingMatch ? shippingMatch[1] : '0';
+            const total = totalMatch ? totalMatch[1] : '';
             
             // 各商品を別の行として返す
-            products.forEach((product, index) => {
-                orders.push({
-                    orderDate: orderDate,
-                    orderId: orderId,
-                    recipient: recipientInfo,
-                    productDetails: product.productDetails,
-                    quantity: product.quantity,
-                    subtotal: product.subtotal,
-                    shipping: index === products.length - 1 ? shipping : '0', // 最後の商品のみ送料
-                    total: index === products.length - 1 ? total : product.subtotal
-                });
-            });
-            
-            return orders;
+            return products.map((product, index) => ({
+                orderDate: orderDateMatch ? orderDateMatch[1] : '',
+                orderId: orderIdMatch[1],
+                recipient: recipientInfo,
+                productDetails: product.productDetails,
+                quantity: product.quantity,
+                subtotal: product.subtotal,
+                shipping: index === products.length - 1 ? shipping : '0',
+                total: index === products.length - 1 ? total : product.subtotal
+            }));
         }
 
         function displayResults() {
