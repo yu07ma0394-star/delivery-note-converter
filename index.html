@@ -728,26 +728,27 @@
                 // 商品テキストを整形
                 const lines = [];
                 
-                // まず全てのオプション行を抽出（名前 : 値(¥金額) の形式）
-                const optionPattern = /([A-Za-z\s]+?)\s*[:：]\s*([^:：]+?\(¥[\d,]+\))/g;
+                // オプション行を抽出（オプション名は1〜3単語に制限）
+                // パターン: 「1〜3単語 : 値(¥金額)」
+                const optionPattern = /([A-Za-z]+(?:\s+[A-Za-z]+){0,2})\s*[:：]\s*([^:：]+?\(¥[\d,]+\))/g;
                 let optionMatch;
                 const options = [];
+                let firstOptionIndex = -1;
                 
                 while ((optionMatch = optionPattern.exec(productText)) !== null) {
-                    options.push({
-                        full: optionMatch[0],
-                        name: optionMatch[1].trim(),
-                        value: optionMatch[2].trim()
-                    });
+                    if (firstOptionIndex === -1) {
+                        firstOptionIndex = optionMatch.index;
+                    }
+                    options.push(`${optionMatch[1].trim()} : ${optionMatch[2].trim()}`);
                 }
                 
                 // 商品名を抽出（最初のオプションの前まで）
                 let productName = productText;
-                if (options.length > 0) {
-                    const firstOptionIndex = productText.indexOf(options[0].full);
-                    if (firstOptionIndex > 0) {
-                        productName = productText.substring(0, firstOptionIndex).trim();
-                    }
+                if (firstOptionIndex > 0) {
+                    productName = productText.substring(0, firstOptionIndex).trim();
+                } else if (options.length === 0) {
+                    // オプションがない場合はそのまま
+                    productName = productText;
                 }
                 
                 // 商品名を追加
@@ -755,7 +756,7 @@
                 
                 // オプション行を追加
                 options.forEach(opt => {
-                    lines.push(`${opt.name} : ${opt.value}`);
+                    lines.push(opt);
                 });
                 
                 products.push({
