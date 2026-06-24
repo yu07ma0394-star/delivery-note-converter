@@ -728,67 +728,35 @@
                 // 商品テキストを整形
                 const lines = [];
                 
-                // 商品名（【】で始まるか、×を含むパターン）
-                if (productText.startsWith('【')) {
-                    // 【Light】Arbor Hair Oil 100ml のような形式
-                    const mainMatch = productText.match(/(【[^】]+】[^\s]+\s+[^\s]+\s+[^\s]+)/);
-                    if (mainMatch) {
-                        lines.push(mainMatch[1]);
-                    }
-                } else if (productText.includes('×')) {
-                    // Chalice wood diffuser×aroma oil 5ml set のような形式
-                    const mainMatch = productText.match(/^([^:：]+?)(?=\s+[A-Z][a-z]+\s*[:：])/);
-                    if (mainMatch) {
-                        lines.push(mainMatch[1].trim());
-                    }
-                } else {
-                    // Arbor Gift- Life Design Set - のような形式
-                    const mainMatch = productText.match(/^([^:：]+?)(?=\s+[A-Z][a-z]+\s*[:：])/);
-                    if (mainMatch) {
-                        lines.push(mainMatch[1].trim());
+                // まず全てのオプション行を抽出（名前 : 値(¥金額) の形式）
+                const optionPattern = /([A-Za-z\s]+?)\s*[:：]\s*([^:：]+?\(¥[\d,]+\))/g;
+                let optionMatch;
+                const options = [];
+                
+                while ((optionMatch = optionPattern.exec(productText)) !== null) {
+                    options.push({
+                        full: optionMatch[0],
+                        name: optionMatch[1].trim(),
+                        value: optionMatch[2].trim()
+                    });
+                }
+                
+                // 商品名を抽出（最初のオプションの前まで）
+                let productName = productText;
+                if (options.length > 0) {
+                    const firstOptionIndex = productText.indexOf(options[0].full);
+                    if (firstOptionIndex > 0) {
+                        productName = productText.substring(0, firstOptionIndex).trim();
                     }
                 }
                 
-                // バリエーション行（単独の単語）
-                const restText = productText.substring(lines[0] ? lines[0].length : 0).trim();
-                const parts = restText.split(/\s+/);
-                let currentOption = '';
+                // 商品名を追加
+                lines.push(productName);
                 
-                for (let i = 0; i < parts.length; i++) {
-                    const part = parts[i];
-                    
-                    if (part.includes(':') || part.includes('：')) {
-                        // オプション名の開始
-                        if (currentOption && !currentOption.includes(':') && !currentOption.includes('：')) {
-                            // 前のバリエーション行を保存
-                            lines.push(currentOption.trim());
-                            currentOption = '';
-                        }
-                        
-                        // オプション行を構築
-                        currentOption = part;
-                        while (i + 1 < parts.length && !parts[i + 1].includes(':') && !parts[i + 1].includes('：')) {
-                            i++;
-                            currentOption += ' ' + parts[i];
-                            if (parts[i].includes(')')) break;
-                        }
-                        
-                        lines.push(currentOption.trim());
-                        currentOption = '';
-                    } else {
-                        // バリエーション名
-                        if (currentOption) {
-                            currentOption += ' ' + part;
-                        } else {
-                            currentOption = part;
-                        }
-                    }
-                }
-                
-                // 残りのバリエーション
-                if (currentOption && !currentOption.includes(':') && !currentOption.includes('：')) {
-                    lines.push(currentOption.trim());
-                }
+                // オプション行を追加
+                options.forEach(opt => {
+                    lines.push(`${opt.name} : ${opt.value}`);
+                });
                 
                 products.push({
                     productDetails: lines.join('\n'),
