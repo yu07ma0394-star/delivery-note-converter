@@ -711,7 +711,7 @@
             // 商品テーブル以降のテキストのみを対象にする
             const tableText = text.substring(tableStartMatch.index + tableStartMatch[0].length);
             
-            const productPattern = /(\d{9})\s+(.+?)¥([\d,]+)\s+(\d+)\s+¥([\d,]+)/g;
+            const productPattern = /(\d{8,9})\s+(.+?)¥([\d,]+)\s+(\d+)\s+¥([\d,]+)/g;
             const products = [];
             let match;
             
