@@ -728,89 +728,140 @@
                 // 商品テキストを整形
                 const lines = [];
                 
-                // オプション行を抽出
-                // オプション名の末尾パターン（これらで終わる場合は複数単語のオプション名）
-                const multiWordEndings = ['Oil', 'Bag', 'Wrapping', 'Box', 'Pomp'];
+                // オプション行を抽出（「名前 : 値(¥金額)」形式）
+                // 全ての「: 値(¥金額)」パターンを見つけてから、オプション名を特定
+                const colonValuePattern = /[:：]\s*([^:：]+?\(¥[\d,]+\))/g;
+                let cvMatch;
+                const colonPositions = [];
                 
-                // まず全ての「: 値(¥金額)」パターンを見つける
-                const colonPattern = /\s+([\w\s]+?)\s*[:：]\s*([^:：]+?\(¥[\d,]+\))/g;
-                let colonMatch;
+                while ((cvMatch = colonValuePattern.exec(productText)) !== null) {
+                    colonPositions.push({
+                        colonIndex: cvMatch.index,
+                        value: cvMatch[1].trim()
+                    });
+                }
+                
+                // 各コロン位置からオプション名を逆算
                 const options = [];
-                let firstOptionStart = -1;
+                let firstOptionStart = productText.length;
                 
-                while ((colonMatch = colonPattern.exec(productText)) !== null) {
-                    let optionName = colonMatch[1].trim();
-                    const optionValue = colonMatch[2].trim();
+                // 既知のオプション名パターン（完全一致または末尾一致）
+                const knownOptionNames = [
+                    'Hair Oil Pomp', 'Sheer Bag Wrapping', 'Box Wrapping', 'Gift Wrapping',
+                    'Aroma Oil', 'Hair Oil', 'Paper Bag', 'Sheer Bag', 'Package Box',
+                    'Box', 'Bag'
+                ];
+                
+                // 追加オプション（日本語を含む）
+                const additionalPatterns = ['Aroma Oil (追加)'];
+                
+                for (const pos of colonPositions) {
+                    const beforeColon = productText.substring(0, pos.colonIndex).trim();
                     
-                    // オプション名を正しく抽出
-                    // 末尾の単語をチェック
-                    const words = optionName.split(/\s+/);
-                    const lastWord = words[words.length - 1];
+                    let optionName = null;
+                    let optionStart = -1;
                     
-                    let actualOptionName;
-                    let optionStartIndex;
+                    // まず既知のオプション名パターンをチェック（長いものから）
+                    for (const known of knownOptionNames) {
+                        if (beforeColon.endsWith(known)) {
+                            optionName = known;
+                            optionStart = beforeColon.lastIndexOf(known);
+                            break;
+                        }
+                    }
                     
-                    if (multiWordEndings.includes(lastWord) && words.length >= 2) {
-                        // 末尾が特定のパターンなら、最後の2〜3単語をオプション名とする
-                        if (words.length >= 3 && lastWord === 'Pomp') {
-                            // Hair Oil Pomp のような3単語
-                            actualOptionName = words.slice(-3).join(' ');
+                    // 追加パターンをチェック
+                    if (!optionName) {
+                        for (const pattern of additionalPatterns) {
+                            if (beforeColon.endsWith(pattern)) {
+                                optionName = pattern;
+                                optionStart = beforeColon.lastIndexOf(pattern);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 既知のパターンに一致しない場合、最後の1〜3単語をオプション名とする
+                    if (!optionName) {
+                        const words = beforeColon.split(/\s+/);
+                        const lastWord = words[words.length - 1];
+                        
+                        // 末尾の単語がオプション名の特徴を持つ場合
+                        const optionEndings = ['Oil', 'Bag', 'Wrapping', 'Box', 'Pomp'];
+                        
+                        if (optionEndings.includes(lastWord)) {
+                            // 末尾から2〜3単語をオプション名とする
+                            if (words.length >= 3 && ['Wrapping', 'Pomp'].includes(lastWord)) {
+                                optionName = words.slice(-3).join(' ');
+                            } else if (words.length >= 2) {
+                                optionName = words.slice(-2).join(' ');
+                            } else {
+                                optionName = lastWord;
+                            }
                         } else {
-                            // Aroma Oil, Paper Bag などの2単語
-                            actualOptionName = words.slice(-2).join(' ');
+                            // 1単語のオプション名
+                            optionName = lastWord;
                         }
-                    } else {
-                        // 1単語のオプション名（Box, Olive など）
-                        actualOptionName = lastWord;
+                        optionStart = beforeColon.lastIndexOf(optionName);
                     }
                     
-                    // オプションの開始位置を計算
-                    const fullMatch = colonMatch[0];
-                    const matchIndex = colonMatch.index;
-                    optionStartIndex = productText.indexOf(actualOptionName, matchIndex > 0 ? matchIndex - actualOptionName.length - 5 : 0);
-                    
-                    if (firstOptionStart === -1 || optionStartIndex < firstOptionStart) {
-                        // 最初のオプションの開始位置を正確に計算
-                        const beforeOption = productText.substring(0, matchIndex + 1).lastIndexOf(actualOptionName);
-                        if (beforeOption !== -1) {
-                            firstOptionStart = beforeOption;
+                    if (optionName && optionStart >= 0) {
+                        options.push({
+                            name: optionName,
+                            value: pos.value,
+                            startIndex: optionStart
+                        });
+                        
+                        if (optionStart < firstOptionStart) {
+                            firstOptionStart = optionStart;
                         }
-                    }
-                    
-                    options.push(`${actualOptionName} : ${optionValue}`);
-                }
-                
-                // 商品名とバリエーションを抽出（最初のオプションの前まで）
-                let productNameAndVariation = productText;
-                
-                if (options.length > 0) {
-                    // 最初のオプション名を見つける
-                    const firstOption = options[0].split(' : ')[0];
-                    const firstOptionIndex = productText.indexOf(firstOption);
-                    
-                    if (firstOptionIndex > 0) {
-                        productNameAndVariation = productText.substring(0, firstOptionIndex).trim();
                     }
                 }
                 
-                // 商品名とバリエーションを分離
-                // バリエーションは単独の単語（Entrance, Olive など）で、商品名の後に来る
-                const nameWords = productNameAndVariation.split(/\s+/);
-                let productName = productNameAndVariation;
+                // 商品名を抽出（最初のオプションの開始位置より前）
+                let productName = productText;
                 let variation = '';
                 
-                // 商品名の終端パターン
-                const productNameEndings = ['Set', 'set', 'ml', 'Mist', 'Bag', 'Oil', 'Ylang'];
-                
-                for (let i = nameWords.length - 1; i >= 0; i--) {
-                    const word = nameWords[i];
-                    if (productNameEndings.some(ending => word.endsWith(ending) || word === ending)) {
-                        // この単語で商品名が終わる
-                        productName = nameWords.slice(0, i + 1).join(' ');
-                        if (i < nameWords.length - 1) {
-                            variation = nameWords.slice(i + 1).join(' ');
+                if (options.length > 0 && firstOptionStart > 0) {
+                    const beforeFirstOption = productText.substring(0, firstOptionStart).trim();
+                    
+                    // 商品名の終端パターンを探す
+                    // 「Set」「ml」「Mist」「Ylang」「Citrus」「Entrance」で終わる部分を商品名とする
+                    const productEndPatterns = ['Set', 'ml', 'Mist', 'Ylang', 'Citrus', 'Entrance', 'Wood', 'Bergamot'];
+                    
+                    const words = beforeFirstOption.split(/\s+/);
+                    let productEndIndex = words.length;
+                    
+                    for (let i = words.length - 1; i >= 0; i--) {
+                        const word = words[i];
+                        if (productEndPatterns.some(p => word === p || word.endsWith(p))) {
+                            productEndIndex = i + 1;
+                            break;
                         }
-                        break;
+                        // 「/」や「×」や「+」を含む場合、その前で切らない
+                        if (word.includes('/') || word.includes('×') || word.includes('+')) {
+                            continue;
+                        }
+                    }
+                    
+                    productName = words.slice(0, productEndIndex).join(' ');
+                    
+                    // バリエーション（商品名の後、オプションの前）
+                    if (productEndIndex < words.length) {
+                        variation = words.slice(productEndIndex).join(' ');
+                    }
+                } else if (options.length === 0) {
+                    // オプションがない場合
+                    // バリエーションが含まれているかチェック
+                    const words = productText.split(/\s+/);
+                    const variationWords = ['Entrance', 'Bergamot', 'Wood', 'Olive', 'Green', 'Brown', 'Silver'];
+                    
+                    for (let i = words.length - 1; i >= 0; i--) {
+                        if (variationWords.includes(words[i])) {
+                            productName = words.slice(0, i).join(' ');
+                            variation = words.slice(i).join(' ');
+                            break;
+                        }
                     }
                 }
                 
@@ -824,7 +875,7 @@
                 
                 // オプション行を追加
                 options.forEach(opt => {
-                    lines.push(opt);
+                    lines.push(`${opt.name} : ${opt.value}`);
                 });
                 
                 products.push({
