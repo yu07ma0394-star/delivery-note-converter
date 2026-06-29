@@ -911,7 +911,26 @@
                 total: index === products.length - 1 ? total : product.subtotal
             }));
             
-            // 複数商品がある場合も別々の行として返す
+            // 複数商品がある場合は1行にまとめる
+            if (allProducts.length > 1) {
+                // 各商品の詳細を空行で区切って結合
+                const combinedProductDetails = allProducts.map(p => p.productDetails).join('\n\n');
+                
+                const totalQuantity = allProducts.reduce((sum, p) => sum + parseInt(p.quantity), 0);
+                const totalSubtotal = allProducts.reduce((sum, p) => sum + parseInt(p.subtotal.replace(/,/g, '')), 0);
+                
+                return [{
+                    orderDate: allProducts[0].orderDate,
+                    orderId: allProducts[0].orderId,
+                    recipient: allProducts[0].recipient,
+                    productDetails: combinedProductDetails,
+                    quantity: totalQuantity.toString(),
+                    subtotal: totalSubtotal.toLocaleString(),
+                    shipping: shipping,
+                    total: total
+                }];
+            }
+            
             return allProducts;
         }
 
