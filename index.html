@@ -439,7 +439,7 @@
 
             .container {
                 max-width: 100%;
-                padding: 20px;
+                padding: 10px;
             }
 
             .upload-section,
@@ -461,6 +461,7 @@
 
             table {
                 page-break-inside: auto;
+                font-size: 8pt;
             }
 
             tr {
@@ -479,14 +480,24 @@
                 color: white !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+                padding: 8px 4px;
+                font-size: 8pt;
+            }
+
+            /* 印刷用の列幅調整 */
+            th:nth-child(1), td:nth-child(1) { width: 8% !important; }  /* 注文日 */
+            th:nth-child(2), td:nth-child(2) { width: 12% !important; } /* 注文ID */
+            th:nth-child(3), td:nth-child(3) { width: 22% !important; } /* お届け先情報 */
+            th:nth-child(4), td:nth-child(4) { width: 50% !important; } /* 商品詳細 */
+            th:nth-child(5), td:nth-child(5) { width: 8% !important; }  /* 数量 */
+
+            td {
+                font-size: 7pt;
+                padding: 6px 4px;
             }
 
             tbody tr:hover {
                 background: transparent;
-            }
-
-            td {
-                font-size: 9pt;
             }
 
             .amount {
